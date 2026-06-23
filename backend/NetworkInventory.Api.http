@@ -1,0 +1,6 @@
+@NetworkInventory.Api_HostAddress = http://localhost:5007
+
+GET {{NetworkInventory.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,36 @@
+# C# / Visual Studio
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+.vs/
+.vscode/
+*.user
+*.userosscache
+*.sln.docstates
+appsettings.Development.json
+
+# Node / npm
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+.env
+.env.local
+
+# General
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/

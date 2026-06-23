@@ -1,0 +1,71 @@
+# Диаграмма классов системы учёта сетевого оборудования
+
+```mermaid
+classDiagram
+    class User {
+        +int Id
+        +string Username
+        +string PasswordHash
+        +string Role
+    }
+
+    class Device {
+        +int Id
+        +string Name
+        +string Type
+        +string IpAddress
+        +string MacAddress
+        +string Location
+        +string Description
+        +DateTime LastModifiedDate
+        +int? LastModifiedByUserId
+        +List~NetworkInterface~ Interfaces
+    }
+
+    class NetworkInterface {
+        +int Id
+        +int DeviceId
+        +string InterfaceName
+        +string IpAddress
+        +string MacAddress
+        +string Status
+    }
+
+    class AppDbContext {
+        +DbSet~User~ Users
+        +DbSet~Device~ Devices
+        +DbSet~NetworkInterface~ Interfaces
+        +SaveChangesAsync() Task~int~
+    }
+
+    class AuthController {
+        -AppDbContext _context
+        -JwtService _jwtService
+        +Login(LoginDto dto) Task
+        +Logout() Task
+        +GetMe() Task
+    }
+
+    class DevicesController {
+        -AppDbContext _context
+        +GetDevices() Task
+        +GetDevice(int id) Task
+        +CreateDevice(DeviceCreateDto dto) Task
+        +UpdateDevice(int id, DeviceUpdateDto dto) Task
+        +DeleteDevice(int id) Task
+    }
+
+    Device "1" *-- "many" NetworkInterface : содержит
+    AppDbContext "1" --> "many" User : управляет
+    AppDbContext "1" --> "many" Device : управляет
+    AuthController ..> AppDbContext : использует
+    AuthController ..> JwtService : использует
+    DevicesController ..> AppDbContext : использует
+```
+
+## Описание связей
+1. **User**: Представляет пользователя системы с определенной ролью (Admin/User).
+2. **Device**: Основная сущность оборудования. Имеет связь "один-ко-многим" с интерфейсами.
+3. **NetworkInterface**: Сетевой порт устройства.
+4. **AppDbContext**: Центральный компонент доступа к данным, реализующий логику аудита в `SaveChangesAsync`.
+5. **Controllers**: Обрабатывают HTTP-запросы, используют контекст БД и обеспечивают соблюдение ролевой модели (RBAC).

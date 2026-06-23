@@ -1,0 +1,18 @@
+# Build
+bin/
+obj/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE
+.vs/
+.vscode/
+*.user
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store

@@ -1,0 +1,267 @@
+# Система учёта сетевого оборудования
+
+**Индивидуальное задание №11**  
+**Студент:** Артыков Амирбек  
+**Группа:** БИС 3-24  
+**Направление:** Информационная безопасность  
+
+Веб-приложение для инвентаризации сетевого оборудования с акцентом на **безопасную разработку (Secure SDLC)**, аудит действий пользователей и разграничение прав доступа (RBAC).
+
+---
+
+## Технологический стек
+
+| Слой | Технологии |
+|------|------------|
+| **Backend** | ASP.NET Core Web API (.NET 9), Entity Framework Core, SQLite |
+| **Frontend** | React 18, Vite 6, React Router 6, Axios |
+| **Безопасность** | JWT (HttpOnly cookies), BCrypt, CORS, RBAC, DTO, Data Annotations |
+
+---
+
+## Быстрый запуск
+
+### Требования
+
+- [.NET 9 SDK](https://dotnet.microsoft.com/download)
+- [Node.js 18+](https://nodejs.org/) (для фронтенда)
+
+### 1. Backend (REST API)
+
+```bash
+cd NetworkInventoryProject/backend
+dotnet run
+```
+
+API будет доступен по адресу: **http://localhost:5007**
+
+При первом запуске автоматически создаётся SQLite-база `networkinventory.db` и заполняется тестовыми данными.
+
+### 2. Frontend (React SPA)
+
+```bash
+cd NetworkInventoryProject/frontend
+npm install
+npm run dev
+```
+
+Приложение откроется по адресу: **http://localhost:5173**
+
+### Тестовые учётные записи
+
+| Роль | Логин | Пароль | Права |
+|------|-------|--------|-------|
+| **Admin** | `admin` | `Admin123!` | Чтение, создание, редактирование, удаление |
+| **User** | `operator` | `Operator123!` | Только чтение |
+
+---
+
+## Структура проекта
+
+```
+NetworkInventoryProject/
+│
+├── backend/                          # ASP.NET Core Web API
+│   ├── Controllers/
+│   │   ├── AuthController.cs         # Вход/выход, JWT в HttpOnly cookie
+│   │   └── DevicesController.cs      # CRUD устройств + RBAC
+│   ├── Data/
+│   │   ├── AppDbContext.cs           # EF Core + аудит в SaveChangesAsync
+│   │   └── DbInitializer.cs          # Seed: 2 пользователя, 5 устройств
+│   ├── Models/
+│   │   ├── User.cs                   # Пользователь (роль для RBAC)
+│   │   ├── Device.cs                 # Сетевое устройство + поля аудита
+│   │   └── NetworkInterface.cs       # Порты устройства (1-ко-многим)
+│   ├── DTOs/
+│   │   ├── AuthDtos.cs               # LoginDto — защита от Over-Posting
+│   │   └── DeviceDtos.cs             # Create/Update/Response DTO
+│   ├── Services/
+│   │   └── JwtService.cs             # Генерация JWT-токенов
+│   ├── Program.cs                    # DI, CORS, JWT, middleware
+│   └── appsettings.json              # Строка подключения, JWT-ключ, CORS
+│
+├── frontend/                         # React + Vite SPA
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── axios.js              # Axios + withCredentials (cookies)
+│   │   ├── components/
+│   │   │   ├── ProtectedRoute.jsx    # HOC защиты маршрутов
+│   │   │   └── Navbar.jsx            # Навигация и выход
+│   │   ├── pages/
+│   │   │   ├── Login.jsx             # Страница входа
+│   │   │   ├── Dashboard.jsx         # Список оборудования
+│   │   │   └── DeviceDetails.jsx     # Карточка + аудит + интерфейсы
+│   │   ├── App.jsx                   # Маршрутизация
+│   │   ├── main.jsx                  # Точка входа React
+│   │   └── index.css                 # Стили UI
+│   ├── package.json
+│   └── vite.config.js
+│
+└── README.md                         # Данный файл (материал для отчёта)
+```
+
+---
+
+## Описание ключевых файлов
+
+### Backend
+
+| Файл | Назначение |
+|------|------------|
+| `Program.cs` | Регистрация сервисов (DI), настройка JWT-аутентификации (чтение токена из cookie), строгая политика CORS, middleware pipeline |
+| `AppDbContext.cs` | Контекст EF Core; переопределён `SaveChangesAsync` для автоматического аудита (`LastModifiedDate`, `LastModifiedByUserId`) |
+| `DbInitializer.cs` | Создание начальных данных: admin, operator, 5 устройств с 2–4 интерфейсами каждое |
+| `AuthController.cs` | `POST /api/auth/login` — устанавливает JWT в HttpOnly cookie (не в JSON); `POST /api/auth/logout` — удаляет cookie |
+| `DevicesController.cs` | REST API для устройств; `[Authorize(Roles = "Admin")]` на POST/PUT/DELETE |
+| `DeviceDtos.cs` | DTO с `[Required]`, `[StringLength]`, `[RegularExpression]` — валидация и защита от Over-Posting |
+| `JwtService.cs` | Генерация подписанного JWT (HMAC-SHA256) с claims: id, username, role |
+
+### Frontend
+
+| Файл | Назначение |
+|------|------------|
+| `axios.js` | `withCredentials: true` — браузер отправляет HttpOnly cookie; перехватчик 401 → редирект на login |
+| `ProtectedRoute.jsx` | HOC: проверяет `/api/auth/me`, неавторизованных перенаправляет на `/login` |
+| `Login.jsx` | Форма входа; токен **не сохраняется** в localStorage |
+| `Dashboard.jsx` | Таблица/карточки устройств с кратким аудитом |
+| `DeviceDetails.jsx` | Полная карточка: NetworkRole, таблица интерфейсов, блок «Аудит изменений» |
+
+---
+
+## Архитектура и средства защиты информации
+
+
+### 1. JWT в HttpOnly Cookie (защита от XSS)
+
+**Проблема:** При хранении JWT в `localStorage` или `sessionStorage` злоумышленник может украсть токен через XSS-атаку (внедрение JavaScript на страницу).
+
+**Решение:** Backend устанавливает JWT в cookie с флагами:
+- `HttpOnly` — JavaScript не может прочитать cookie (`document.cookie` недоступен)
+- `Secure` — передача только по HTTPS (в Production)
+- `SameSite=Strict` — cookie не отправляется при cross-site запросах (защита от CSRF)
+
+Токен **не возвращается** в теле JSON-ответа (`AuthController.Login`). Frontend использует `withCredentials: true` в Axios — браузер автоматически прикрепляет cookie к каждому запросу.
+
+**Файлы:** `AuthController.cs`, `Program.cs` (OnMessageReceived), `frontend/src/api/axios.js`
+
+---
+
+### 2. RBAC — Role-Based Access Control
+
+**Проблема:** Все авторизованные пользователи не должны иметь одинаковые права.
+
+**Решение:** Две роли:
+- `Admin` — полный CRUD над устройствами
+- `User` — только чтение (GET)
+
+Атрибут `[Authorize(Roles = Roles.Admin)]` на методах `Create`, `Update`, `Delete` в `DevicesController.cs`. Роль хранится в JWT claim `ClaimTypes.Role` и проверяется middleware ASP.NET Core.
+
+---
+
+### 3. CORS — строгое ограничение origin
+
+**Проблема:** Без CORS любой сайт может отправлять запросы к API от имени пользователя (при наличии cookie).
+
+**Решение:** В `Program.cs` политика `StrictFrontendPolicy` разрешает запросы **только** с `http://localhost:5173` и `http://127.0.0.1:5173`. Используется `AllowCredentials()` для передачи cookies.
+
+```csharp
+policy.WithOrigins("http://localhost:5173", "http://127.0.0.1:5173")
+      .AllowCredentials();
+```
+
+---
+
+### 4. Защита от SQL-инъекций (SQLi)
+
+**Проблема:** Конкатенация пользовательского ввода в SQL-запросы позволяет выполнить произвольный код в БД.
+
+**Решение:** Все обращения к БД — через **LINQ** и Entity Framework Core. EF генерирует **параметризованные** SQL-запросы, где пользовательский ввод передаётся как параметр, а не как часть SQL-кода.
+
+Пример в `DevicesController.cs`:
+```csharp
+var device = await _context.Devices
+    .FirstOrDefaultAsync(d => d.Id == id);  // id — параметр, не конкатенация
+```
+
+---
+
+### 5. DTO и защита от Over-Posting
+
+**Проблема:** Mass Assignment — клиент может передать лишние поля (например, `LastModifiedByUserId`, `Role`), которые сервер примет и запишет в БД.
+
+**Решение:** Контроллеры принимают только **DTO** (`DeviceCreateDto`, `DeviceUpdateDto`), содержащие разрешённые поля. Поля аудита (`LastModifiedDate`, `LastModifiedByUserId`) устанавливаются только сервером в `SaveChangesAsync`.
+
+Data Annotations (`[Required]`, `[StringLength]`, `[RegularExpression]`) фильтруют и валидируют ввод на уровне модели.
+
+---
+
+### 6. Аудит изменений (Accountability)
+
+**Принцип:** Каждое изменение сетевого устройства должно быть привязано к сотруднику и времени (принцип **подотчётности** из расширенной модели безопасности).
+
+**Реализация:** В `AppDbContext.SaveChangesAsync` при `EntityState.Added` или `Modified` для сущности `Device` автоматически устанавливаются:
+- `LastModifiedDate` = `DateTime.UtcNow`
+- `LastModifiedByUserId` = ID из JWT claim текущего HTTP-запроса
+
+Пользователь не может подделать эти поля через API (они отсутствуют в DTO).
+
+---
+
+### 7. Хэширование паролей (BCrypt)
+
+Пароли не хранятся в открытом виде. При регистрации/seed используется `BCrypt.Net.BCrypt.HashPassword()`. При входе — `BCrypt.Verify()`. Даже при утечке БД восстановить исходные пароли практически невозможно.
+
+---
+
+### 8. Логирование событий безопасности
+
+`ILogger` фиксирует:
+- Успешные и неудачные попытки входа (с IP-адресом)
+- Создание, изменение, удаление устройств (с именем пользователя)
+
+Логи выводятся в консоль; в Production рекомендуется Serilog + файл/ELK.
+
+---
+
+## API Endpoints
+
+| Метод | URL | Авторизация | Описание |
+|-------|-----|-------------|----------|
+| POST | `/api/auth/login` | Нет | Вход, установка JWT cookie |
+| POST | `/api/auth/logout` | Да | Выход, удаление cookie |
+| GET | `/api/auth/me` | Да | Текущий пользователь |
+| GET | `/api/devices` | Да | Список устройств |
+| GET | `/api/devices/{id}` | Да | Детали устройства |
+| POST | `/api/devices` | Admin | Создание |
+| PUT | `/api/devices/{id}` | Admin | Обновление |
+| DELETE | `/api/devices/{id}` | Admin | Удаление |
+
+---
+
+## Начальные данные (Seed)
+
+**Пользователи:** admin (Admin), operator (User)
+
+**Устройства (5 шт.):**
+
+1. **GW-CORE-01** — Router, «Главный шлюз организации»
+2. **SW-FLOOR2-AGG** — Switch, «Агрегация 2 этажа»
+3. **FW-VPN-01** — Firewall, «VPN-туннель с филиалом»
+4. **SW-SALES-01** — Switch, «Коммутатор отдела продаж»
+5. **AP-WIFI-HQ** — Access Point, «Wi-Fi главного офиса»
+
+У каждого устройства 2–4 сетевых интерфейса с IP/MAC-адресами.
+
+
+## Рекомендации для демонстрации на защите
+
+1. Показать вход под `admin` и `operator` — разница в кнопках редактирования.
+2. Открыть карточку устройства — блок «Аудит изменений».
+3. Отредактировать устройство под admin — обновление полей аудита.
+4. В DevTools → Application → Cookies — показать HttpOnly флаг у `access_token`.
+5. В коде показать `SaveChangesAsync` в `AppDbContext.cs` и `AuthController.Login` с cookie.
+6. Объяснить DTO в `DeviceDtos.cs` и атрибут `[Authorize(Roles = "Admin")]`.
+
+---
+
+*Проект подготовлен для индивидуального задания №11 по дисциплине «Информационная безопасность».*
